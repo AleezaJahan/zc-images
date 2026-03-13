@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bag Generation Status</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #111; }
+    h1 { margin: 0 0 16px; }
+    .summary, .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .pill { border: 1px solid #ddd; border-radius: 999px; padding: 6px 10px; font-size: 13px; }
+    .filters input, .filters select { padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; background: #fff; }
+    .meta { font-size: 13px; color: #666; margin-top: 4px; }
+    .status { font-weight: 700; margin-top: 6px; }
+    .thumb { margin: 12px 0; }
+    .thumb img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 8px; border: 1px solid #eee; }
+    .empty { width: 100%; aspect-ratio: 1 / 1; display: grid; place-items: center; border: 1px dashed #ddd; border-radius: 8px; color: #888; background: #fafafa; }
+    .actions a { margin-right: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Bag Generation Status</h1>
+  <div class="summary" id="summary"></div>
+  <div class="filters">
+    <input id="search" type="text" placeholder="Search bag name">
+    <select id="variant">
+      <option value="">All variants</option>
+      <option value="lifestyle">lifestyle</option>
+      <option value="editorial">editorial</option>
+    </select>
+    <select id="status">
+      <option value="">All statuses</option>
+      <option value="pending">pending</option>
+      <option value="running">running</option>
+      <option value="done">done</option>
+      <option value="failed">failed</option>
+    </select>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    const SUPABASE_URL = "https://dyjkpuwgolgbyqvovmil.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_rycZdaeb00zOx0R5SPcTiw_dGlSQjF7";
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let rows = [];
+
+    function renderSummary(items) {
+      const done = items.filter(x => x.status === "done").length;
+      const pending = items.filter(x => x.status === "pending").length;
+      const running = items.filter(x => x.status === "running").length;
+      const failed = items.filter(x => x.status === "failed").length;
+      document.getElementById("summary").innerHTML = `
+        <div class="pill">Total: ${items.length}</div>
+        <div class="pill">Done: ${done}</div>
+        <div class="pill">Pending: ${pending}</div>
+        <div class="pill">Running: ${running}</div>
+        <div class="pill">Failed: ${failed}</div>
+      `;
+    }
+
+    function getFilteredRows() {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const variant = document.getElementById("variant").value;
+      const status = document.getElementById("status").value;
+      return rows.filter(row => {
+        if (q && !row.name.toLowerCase().includes(q)) return false;
+        if (variant && row.variant !== variant) return false;
+        if (status && row.status !== status) return false;
+        return true;
+      });
+    }
+
+    function renderGrid() {
+      const items = getFilteredRows();
+      renderSummary(rows);
+      const html = items.map(row => `
+        <div class="card">
+          <div><strong>${row.name}</strong></div>
+          <div class="meta">${row.product_id} / ${row.variant}</div>
+          <div class="status">Status: ${row.status}</div>
+          ${row.error ? `<div class="meta">Error: ${row.error}</div>` : ""}
+          <div class="thumb">
+            ${row.final_image_url
+              ? `<a href="${row.final_image_url}" target="_blank"><img src="${row.final_image_url}" alt=""></a>`
+              : `<div class="empty">No final image yet</div>`}
+          </div>
+          <div class="actions">
+            ${row.final_image_url ? `<a href="${row.final_image_url}" target="_blank" download>download final</a>` : ""}
+            ${row.product_url ? `<a href="${row.product_url}" target="_blank">product</a>` : ""}
+          </div>
+        </div>
+      `).join("");
+      document.getElementById("grid").innerHTML = html;
+    }
+
+    async function loadRows() {
+      const { data, error } = await client
+        .from("bag_generations")
+        .select("*")
+        .order("product_id", { ascending: true })
+        .order("variant", { ascending: true });
+      if (error) {
+        document.getElementById("grid").innerHTML = `<div>${error.message}</div>`;
+        return;
+      }
+      rows = data || [];
+      renderGrid();
+    }
+
+    document.getElementById("search").addEventListener("input", renderGrid);
+    document.getElementById("variant").addEventListener("change", renderGrid);
+    document.getElementById("status").addEventListener("change", renderGrid);
+
+    loadRows();
+    setInterval(loadRows, 15000);
+  </script>
+</body>
+</html>
